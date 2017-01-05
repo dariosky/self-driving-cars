@@ -1,0 +1,11 @@
+r__pycache__/
+*.py[cod]
+*$py.class
+*.log
+
+/.idea/
+
+/_lib/
+/data
+.ipynb_checkpoints/
+/tfsaves/

@@ -30,10 +30,6 @@ def pool2d(x, k=2, pool_func=default_pooling):
     )
 
 
-def dropout(x, keep_prob=0.5):
-    return tf.nn.dropout(x, keep_prob)
-
-
 def convVars(filter_width, filter_height,
              input_depth, output_depth,
              suffix,
@@ -79,10 +75,9 @@ def training_pipeline(net, one_hot_y, rate=0.001):
 
 
 class NNet:
-    def __init__(self, net_factory, data, output_depth):
+    def __init__(self, data, output_depth):
         super().__init__()
         self.save_path = "./tfsaves/"
-        self.net_factory = net_factory
         self.data = data
         self.output_depth = output_depth
 
@@ -96,17 +91,22 @@ class NNet:
         self.y = tf.placeholder(tf.int32, y_shape)
         one_hot_y = tf.one_hot(self.y, self.output_depth)
 
-        net = self.net_factory(self.x, output_depth)
+        self.dropout_variable = tf.placeholder(dtype=tf.float32, name='dropout_keep_prob')
+
+        self.net = net = self.build_net()
 
         self.training = training_pipeline(net, one_hot_y)
 
-        correct_prediction = tf.equal(tf.argmax(net, 1), tf.argmax(one_hot_y, 1))
+        self.prediction = tf.argmax(net, 1)
+        correct = tf.argmax(one_hot_y, 1)
+        correct_prediction = tf.equal(self.prediction, correct)
         self.accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
         self.session = None
 
     def evaluate(self, dataset,
-                 BATCH_SIZE=128):
+                 BATCH_SIZE=128,
+                 dropout_keep_prob=0.8):
         X_data, y_data = dataset
         num_examples = len(X_data)
         total_accuracy = 0
@@ -115,9 +115,20 @@ class NNet:
             batch_x, batch_y = X_data[offset:offset + BATCH_SIZE], y_data[
                                                                    offset:offset + BATCH_SIZE]
             accuracy = sess.run(self.accuracy_operation,
-                                feed_dict={self.x: batch_x, self.y: batch_y})
+                                feed_dict={
+                                    self.x: batch_x, self.y: batch_y,
+                                    self.dropout_variable: dropout_keep_prob,  # disable dropout
+                                })
+
             total_accuracy += (accuracy * len(batch_x))
         return total_accuracy / num_examples
+
+    def predict(self, x_set):
+        sess = self.get_session()
+        output = self.prediction.eval(session=sess,
+                                      feed_dict={self.x: x_set,
+                                                 self.dropout_variable: 1})
+        return output
 
     def train(self,
               EPOCHS=10, BATCH_SIZE=128,
@@ -137,7 +148,11 @@ class NNet:
             for offset in range(0, num_examples, BATCH_SIZE):
                 end = offset + BATCH_SIZE
                 batch_x, batch_y = X_train[offset:end], y_train[offset:end]
-                sess.run(self.training, feed_dict={self.x: batch_x, self.y: batch_y})
+                sess.run(self.training, feed_dict={
+                    self.x: batch_x,
+                    self.y: batch_y,
+                    self.dropout_variable: 0.5,
+                })
 
             validation_accuracy = self.evaluate(self.data['validation'],
                                                 BATCH_SIZE=BATCH_SIZE)
@@ -155,18 +170,20 @@ class NNet:
             print("Model saved as", output_file)
         print("Training done. Last accuracy =  {:.2f}%".format(last_accuracy * 100))
 
-    def test(self, load_from=None):
+    def test(self, load_from=None, dataset_name='test'):
         sess = self.get_session()
         if load_from is not None:
             print("Loading from last saved state")
             saver = tf.train.Saver()
-            tf.reset_default_graph()
+            # tf.reset_default_graph()
             input_file = self.save_path + load_from
             saver.restore(sess, input_file)
             # self.show_variables()
 
-        test_accuracy = self.evaluate(self.data['test'])
-        print("Test Accuracy = {:.2f}%".format(test_accuracy * 100))
+        test_accuracy = self.evaluate(self.data[dataset_name],
+                                      dropout_keep_prob=1)
+        print("{test_name} Accuracy = {:.2f}%".format(test_accuracy * 100,
+                                                      test_name=dataset_name.title()))
 
     def show_variables(self):
         for v in tf.global_variables():
@@ -181,3 +198,9 @@ class NNet:
             print("Creating Tensorflow session")
             self.session = tf.Session()
         return self.session
+
+    def dropout(self, x):
+        return tf.nn.dropout(x, self.dropout_variable)
+
+    def build_net(self):
+        raise NotImplemented("Please define this methord in a derived class")

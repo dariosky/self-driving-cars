@@ -21,6 +21,9 @@ class Lenet(NNet):
         net = pool2d(net)
         print("P1", net)
 
+        net = self.dropout(net)
+        print("Dropout", net)
+
         # Layer 2: Convolutional. Output = 10x10x16.
         filter_size = 5
         W_2, b_2 = convVars(filter_size, filter_size, 6, 16, '2')

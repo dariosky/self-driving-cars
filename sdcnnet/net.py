@@ -6,7 +6,7 @@ from tensorflow.contrib import layers
 from sdcnnet import shuffle
 
 default_activation = tf.nn.relu
-default_pooling = tf.nn.max_pool
+default_pooling = tf.nn.avg_pool
 
 
 def conv2d(x, W, b, strides=1, padding='SAME', activation=default_activation):
@@ -130,6 +130,14 @@ class NNet:
                                                  self.dropout_variable: 1})
         return output
 
+    def certainty(self, x_set, k):
+        sess = self.get_session()
+        return sess.run(tf.nn.top_k(self.net, k),
+                        feed_dict={
+                            self.x: x_set,
+                            self.dropout_variable: 1,  # disable dropout
+                        })
+
     def train(self,
               EPOCHS=10, BATCH_SIZE=128,
               save_as=None):
@@ -170,16 +178,16 @@ class NNet:
             print("Model saved as", output_file)
         print("Training done. Last accuracy =  {:.2f}%".format(last_accuracy * 100))
 
-    def test(self, load_from=None, dataset_name='test'):
+    def load(self, load_from):
+        input_file = self.save_path + load_from
+        print("Loading from %s" % input_file)
+        saver = tf.train.Saver()
+        # tf.reset_default_graph()
         sess = self.get_session()
-        if load_from is not None:
-            print("Loading from last saved state")
-            saver = tf.train.Saver()
-            # tf.reset_default_graph()
-            input_file = self.save_path + load_from
-            saver.restore(sess, input_file)
-            # self.show_variables()
+        saver.restore(sess, input_file)
+        # self.show_variables()
 
+    def test(self, load_from=None, dataset_name='test'):
         test_accuracy = self.evaluate(self.data[dataset_name],
                                       dropout_keep_prob=1)
         print("{test_name} Accuracy = {:.2f}%".format(test_accuracy * 100,

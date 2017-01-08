@@ -1,28 +1,37 @@
+import os
+
 import tensorflow as tf
 from tensorflow.contrib import layers
 
 from sdcnnet import shuffle
 
+default_activation = tf.nn.relu
+default_pooling = tf.nn.max_pool
 
-def conv2d(x, W, b, strides=1, padding='SAME', activation=tf.nn.sigmoid):
+
+def conv2d(x, W, b, strides=1, padding='SAME', activation=default_activation):
     n = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding=padding)
     n = tf.nn.bias_add(n, b)
     return activation(n)
 
 
-def full(x, W, b, activation=tf.nn.sigmoid):
+def full(x, W, b, activation=default_activation):
     n = tf.add(tf.matmul(x, W), b)
     n = activation(n)
     return n
 
 
-def pool2d(x, k=2, pool_func=tf.nn.max_pool):
+def pool2d(x, k=2, pool_func=default_pooling):
     return pool_func(
         x,
         ksize=[1, k, k, 1],
         strides=[1, k, k, 1],
         padding='SAME'
     )
+
+
+def dropout(x, keep_prob=0.5):
+    return tf.nn.dropout(x, keep_prob)
 
 
 def convVars(filter_width, filter_height,
@@ -68,7 +77,6 @@ class NNet:
         self.output_depth = output_depth
 
         X_train, y_train = self.data['train']
-        X_validation, y_validation = self.data['validation']
 
         x_shape = [None]
         x_shape += X_train[0].shape
@@ -78,7 +86,7 @@ class NNet:
         self.y = tf.placeholder(tf.int32, y_shape)
         one_hot_y = tf.one_hot(self.y, self.output_depth)
 
-        net = self.net_factory(self.x)
+        net = self.net_factory(self.x, output_depth)
 
         self.training = training_pipeline(net, one_hot_y)
 
@@ -126,7 +134,10 @@ class NNet:
 
             if save_as is not None:
                 saver = tf.train.Saver()
-                saver.save(sess, self.save_path + save_as)
+                output_file = self.save_path + save_as
+                if not os.path.isdir(os.path.dirname(output_file)):
+                    os.makedirs(os.path.dirname(output_file))
+                saver.save(sess, output_file)
                 print("Model saved as", save_as)
 
         print("Training done")

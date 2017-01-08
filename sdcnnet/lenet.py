@@ -1,7 +1,7 @@
-from .net import convVars, conv2d, flatten, fullVars, full, pool2d
+from .net import convVars, conv2d, flatten, fullVars, full, pool2d, dropout
 
 
-def Lenet(x):
+def Lenet(x, output_depth, do_dropout=True):
     """ Create a LeNet network
         x inputs should be 32x32xX
     """
@@ -44,8 +44,12 @@ def Lenet(x):
     net = full(net, W_4, b_4)
     print("Lf4", net)
 
-    # Layer 5: Fully Connected. Input = 84. Output = 10.
-    W_5, b_5 = fullVars(84, 10, 'f5')
+    if do_dropout:
+        net = dropout(net)
+        print("Dropout", net)
+
+    # Layer 5: Fully Connected. Input = 84. Output = <output_depth>.
+    W_5, b_5 = fullVars(84, output_depth, 'f5')
     logits = full(net, W_5, b_5)
     print("out", logits)
 

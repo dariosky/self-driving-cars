@@ -37,12 +37,17 @@ def dropout(x, keep_prob=0.5):
 def convVars(filter_width, filter_height,
              input_depth, output_depth,
              suffix,
-             sigma=0.1, mu=0):
-    w = tf.Variable(tf.truncated_normal([filter_width, filter_height,
-                                         input_depth, output_depth],
-                                        stddev=sigma, mean=mu),
-                    name="w_" + suffix)
-    b = tf.Variable(tf.zeros([output_depth]), name='b_' + suffix)
+             sigma=0.1, mu=0.0):
+    w = tf.Variable(
+        tf.truncated_normal([filter_width, filter_height,
+                             input_depth, output_depth],
+                            stddev=sigma, mean=mu),
+        name="w_" + suffix
+    )
+    b = tf.Variable(
+        tf.zeros([output_depth]),
+        name='b_' + suffix,
+    )
     return w, b
 
 
@@ -52,11 +57,16 @@ def flatten(net):
 
 def fullVars(input_size, output_size,
              suffix,
-             sigma=0.1, mu=0):
-    w = tf.Variable(tf.truncated_normal([input_size, output_size],
-                                        stddev=sigma, mean=mu),
-                    name='w_' + suffix)
-    b = tf.Variable(tf.zeros([output_size]), name='b_' + suffix)
+             sigma=0.1, mu=0.0):
+    w = tf.Variable(
+        tf.truncated_normal([input_size, output_size],
+                            stddev=sigma, mean=mu),
+        name='w_' + suffix
+    )
+    b = tf.Variable(
+        tf.zeros([output_size]),
+        name='b_' + suffix
+    )
     return w, b
 
 
@@ -93,12 +103,14 @@ class NNet:
         correct_prediction = tf.equal(tf.argmax(net, 1), tf.argmax(one_hot_y, 1))
         self.accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
+        self.session = None
+
     def evaluate(self, dataset,
                  BATCH_SIZE=128):
         X_data, y_data = dataset
         num_examples = len(X_data)
         total_accuracy = 0
-        sess = tf.get_default_session()
+        sess = self.get_session()
         for offset in range(0, num_examples, BATCH_SIZE):
             batch_x, batch_y = X_data[offset:offset + BATCH_SIZE], y_data[
                                                                    offset:offset + BATCH_SIZE]
@@ -113,41 +125,59 @@ class NNet:
 
         dataset = self.data['train']
         X_train, y_train = dataset
-        with tf.Session() as sess:
-            sess.run(tf.global_variables_initializer())
-            num_examples = len(X_train)
+        sess = self.get_session()
+        num_examples = len(X_train)
+        sess.run(tf.global_variables_initializer())
 
-            print("Training...")
-            print()
-            for i in range(EPOCHS):
-                X_train, y_train = shuffle(self.data['train'])
-                for offset in range(0, num_examples, BATCH_SIZE):
-                    end = offset + BATCH_SIZE
-                    batch_x, batch_y = X_train[offset:end], y_train[offset:end]
-                    sess.run(self.training, feed_dict={self.x: batch_x, self.y: batch_y})
+        print("Training...")
+        print()
+        last_accuracy = None
+        for i in range(EPOCHS):
+            X_train, y_train = shuffle(self.data['train'])
+            for offset in range(0, num_examples, BATCH_SIZE):
+                end = offset + BATCH_SIZE
+                batch_x, batch_y = X_train[offset:end], y_train[offset:end]
+                sess.run(self.training, feed_dict={self.x: batch_x, self.y: batch_y})
 
-                validation_accuracy = self.evaluate(self.data['validation'],
-                                                    BATCH_SIZE=BATCH_SIZE)
-                print("EPOCH {} ...".format(i + 1))
-                print("Validation Accuracy = {:.3f}".format(validation_accuracy))
-                print()
+            validation_accuracy = self.evaluate(self.data['validation'],
+                                                BATCH_SIZE=BATCH_SIZE)
+            print("EPOCH {} ...".format(i + 1))
+            print("Validation Accuracy = {:.2f}%".format(validation_accuracy * 100))
+            last_accuracy = validation_accuracy
 
-            if save_as is not None:
-                saver = tf.train.Saver()
-                output_file = self.save_path + save_as
-                if not os.path.isdir(os.path.dirname(output_file)):
-                    os.makedirs(os.path.dirname(output_file))
-                saver.save(sess, output_file)
-                print("Model saved as", save_as)
-
-        print("Training done")
+        if save_as is not None:
+            saver = tf.train.Saver()
+            # self.show_variables()
+            output_file = self.save_path + save_as
+            if not os.path.isdir(os.path.dirname(output_file)):
+                os.makedirs(os.path.dirname(output_file))
+            saver.save(sess, output_file)
+            print("Model saved as", output_file)
+        print("Training done. Last accuracy =  {:.2f}%".format(last_accuracy * 100))
 
     def test(self, load_from=None):
-        with tf.Session() as sess:
-            if load_from is not None:
-                print("Loading from last saved state")
-                saver = tf.train.Saver()
-                saver.restore(sess, tf.train.latest_checkpoint(self.save_path))
+        sess = self.get_session()
+        if load_from is not None:
+            print("Loading from last saved state")
+            saver = tf.train.Saver()
+            tf.reset_default_graph()
+            input_file = self.save_path + load_from
+            saver.restore(sess, input_file)
+            # self.show_variables()
 
-            test_accuracy = self.evaluate(self.data['test'])
-            print("Test Accuracy = {:.3f}".format(test_accuracy))
+        test_accuracy = self.evaluate(self.data['test'])
+        print("Test Accuracy = {:.2f}%".format(test_accuracy * 100))
+
+    def show_variables(self):
+        for v in tf.global_variables():
+            print(v.name)
+
+    def get_session(self):
+        """
+
+        :rtype: tf.Session
+        """
+        if self.session is None:
+            print("Creating Tensorflow session")
+            self.session = tf.Session()
+        return self.session

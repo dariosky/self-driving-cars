@@ -6,7 +6,7 @@ from tensorflow.contrib import layers
 from sdcnnet import shuffle
 
 default_activation = tf.nn.relu
-default_pooling = tf.nn.avg_pool
+default_pooling = tf.nn.max_pool
 
 
 def conv2d(x, W, b, strides=1, padding='SAME', activation=default_activation):
